@@ -79,15 +79,9 @@ api_key = "你的 API 密钥"
 - 在设置窗口里填的密钥另存在数据文件夹的 `.env` 里，不写进 `config.toml`。Linux 上也可以在启动青简之前设置 `QINGJIAN_API_KEY` 环境变量。
 - 改开关、地址、模型或密钥会自动切换并撤销旧请求。
 
-使用 OpenAI 的 `gpt-6.1-sol` 时，在已有的 `[predict]` 分节填写：
+`reasoning_effort` 留空时不发送推理强度。若接口明确拒绝温度或思考参数，青简会省略被拒的参数重试，并在同一客户端的后续请求中沿用兼容写法，无需按模型名配置。
 
-```toml
-base_url = "https://api.openai.com/v1"
-model = "gpt-6.1-sol"
-reasoning_effort = "low"
-```
-
-该模型始终使用思考；`reasoning_effort` 留空、`none` 或 `minimal` 时，青简按 `low` 发送。`medium`、`high`、`xhigh`、`max` 保留所填强度。若测试连接提示超时，可增大同一分节的 `timeout_ms`；较高思考强度可能增加等待时间与用量。
+若接口要求替代的 token 上限写法，青简会保留生成上限，并预留有限的推理额度。首次请求可能因兼容重试而等待更久；若提示超时，可增大同一分节的 `timeout_ms`。模型必须思考时仍可能增加等待时间与用量。
 
 从较早版本升级上来的 Linux 配置若仍写着旧的翻译快捷键，改为 `translate_selection = "alt+shift+t"` 并保存；安装更新不会覆盖你写过的设置。
 

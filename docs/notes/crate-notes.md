@@ -175,7 +175,7 @@ mac 存在 `Session::spelling`（`Host::follow_highlight`）、Windows / Linux �
 
 ## crates/qingjian-predict
 
-`gpt-6.1-sol` 在共用请求入口使用 `max_completion_tokens`，在调用方的正文预算上额外预留 4096 token 供思考，省略 `temperature`；推理强度为空、`none` 或 `minimal` 时使用 `low`，其余有效强度照传。测试连接、联想、释义与翻译共用这条路径；其他模型保留原有请求参数。
+请求参数不按模型名区分：收到 400 / 422 且明确拒绝当前请求里的可选参数时，省略被拒的 `temperature`、`reasoning_effort` 或 `thinking`；`max_tokens` 被拒则改用 `max_completion_tokens`，在调用方上限上预留有限的 4096 token 供推理。替代的 token 字段也被拒时直接返回错误，不去掉生成上限。能力以客户端为单位记忆，后续请求直接使用兼容写法；每次重试都要实际改变请求，认证、限流、服务端错误与含糊的校验失败不触发参数降级。测试连接、联想、释义与翻译共用这条路径。
 
 TLS 由 feature 选：缺省 `native-tls`（系统 TLS，桌面各壳与 cli 都用这个）；`rustls`（关掉缺省时）走 ring + `webpki-roots` 内置的 Mozilla 根证书、`tls_backend_preconfigured` 交给 reqwest，不用平台证书库（`rustls-platform-verifier` 在安卓要 Java 侧组件），安卓 `apps/android/core` 直接按路径引、关缺省开 `rustls`。工作区的 `async-openai` 不带 TLS feature，直接用它的（`tools/gloss-gen`）自己开 `native-tls`。
 

@@ -52,7 +52,6 @@ pub struct PredictConfig {
 
     /// 推理强度，随请求发 `reasoning_effort`：`none` 关掉模型的思考（联想要的是快，不是想），
     /// 其余 minimal / low / medium / high / xhigh 照传；留空则不发（给不认这个参数的接口）。
-    /// gpt-6.1-sol 另支持 max，不支持关闭思考，留空、none、minimal 都按 low 发送。
     /// DeepSeek V4 这类默认带思考的模型不关会把 token 预算全花在思考上，正文为空。
     pub reasoning_effort: String,
 }
