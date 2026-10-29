@@ -23,6 +23,9 @@ use crate::usage::ApiUsageStats;
 /// 联想回复的 token 上限：几条短句足够，防止模型长篇大论。
 const MAX_TOKENS: u32 = 200;
 
+/// Sol 的完成预算包含思考；额外预留额度，避免短回复还没输出就耗尽预算。
+const SOL_REASONING_TOKENS: u32 = 4096;
+
 /// 采样温度：联想要稳，不要花。
 const TEMPERATURE: f32 = 0.3;
 
@@ -69,7 +72,7 @@ impl ChatClient {
                 .with_http_service(ReqwestService::new(http_client(&config.base_url))),
             model: config.model.clone(),
             timeout: Duration::from_millis(config.timeout_ms),
-            reasoning_effort: parse_reasoning_effort(&config.reasoning_effort),
+            reasoning_effort: parse_reasoning_effort(&config.reasoning_effort, &config.model),
             thinking_switch: ThinkingSwitch::for_url(&config.base_url),
             reply_format: Arc::new(AtomicU8::new(ReplyFormat::JsonObject.index())),
             usage_path: None,
@@ -144,16 +147,25 @@ impl ChatClient {
             ChatCompletionRequestUserMessage::from(user).into(),
         ];
         let mut args = CreateChatCompletionRequestArgs::default();
-        args.model(&self.model)
-            .messages(messages)
-            .max_tokens(max_tokens)
-            .temperature(TEMPERATURE);
-        if let Some(effort) = self.reasoning_effort.clone() {
+        args.model(&self.model).messages(messages);
+        let mut effort = self.reasoning_effort.clone();
+        if self.model == "gpt-6.1-sol" {
+            args.max_completion_tokens(max_tokens.saturating_add(SOL_REASONING_TOKENS));
+            if matches!(
+                effort,
+                None | Some(ReasoningEffort::None | ReasoningEffort::Minimal)
+            ) {
+                effort = Some(ReasoningEffort::Low);
+            }
+        } else {
+            args.max_tokens(max_tokens).temperature(TEMPERATURE);
+        }
+        if let Some(effort) = effort.clone() {
             args.reasoning_effort(effort);
         }
         let mut body = serde_json::to_value(args.build()?)?;
         quantize_temperature(&mut body);
-        if matches!(self.reasoning_effort, Some(ReasoningEffort::None)) {
+        if matches!(effort, Some(ReasoningEffort::None)) {
             self.thinking_switch.disable(&mut body);
         }
         Ok(body)
@@ -368,7 +380,7 @@ fn is_opencode(base_url: &str) -> bool {
 }
 
 /// 配置里的推理强度字符串转成接口枚举；留空不发，认不得的值当留空并记一条警告。
-fn parse_reasoning_effort(value: &str) -> Option<ReasoningEffort> {
+fn parse_reasoning_effort(value: &str, model: &str) -> Option<ReasoningEffort> {
     match value.trim().to_ascii_lowercase().as_str() {
         "" => None,
         "none" => Some(ReasoningEffort::None),
@@ -377,6 +389,7 @@ fn parse_reasoning_effort(value: &str) -> Option<ReasoningEffort> {
         "medium" => Some(ReasoningEffort::Medium),
         "high" => Some(ReasoningEffort::High),
         "xhigh" => Some(ReasoningEffort::Xhigh),
+        "max" if model == "gpt-6.1-sol" => Some(ReasoningEffort::Max),
         other => {
             tracing::warn!(value = other, "reasoning_effort 不认识，不发这个参数");
             None
@@ -412,15 +425,15 @@ mod tests {
     #[test]
     fn reasoning_effort_parses_known_values_and_ignores_the_rest() {
         assert!(matches!(
-            parse_reasoning_effort("none"),
+            parse_reasoning_effort("none", "deepseek-flash"),
             Some(ReasoningEffort::None)
         ));
         assert!(matches!(
-            parse_reasoning_effort(" High "),
+            parse_reasoning_effort(" High ", "deepseek-flash"),
             Some(ReasoningEffort::High)
         ));
-        assert!(parse_reasoning_effort("").is_none());
-        assert!(parse_reasoning_effort("maximum").is_none());
+        assert!(parse_reasoning_effort("", "deepseek-flash").is_none());
+        assert!(parse_reasoning_effort("maximum", "deepseek-flash").is_none());
     }
 
     /// 回归 #287 Bug 1：温度上到线上不能带 f32→f64 的精度尾巴。

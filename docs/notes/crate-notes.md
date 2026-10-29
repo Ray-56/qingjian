@@ -175,6 +175,8 @@ mac 存在 `Session::spelling`（`Host::follow_highlight`）、Windows / Linux �
 
 ## crates/qingjian-predict
 
+`gpt-6.1-sol` 在共用请求入口使用 `max_completion_tokens`，在调用方的正文预算上额外预留 4096 token 供思考，省略 `temperature`；推理强度为空、`none` 或 `minimal` 时使用 `low`，其余有效强度照传。测试连接、联想、释义与翻译共用这条路径；其他模型保留原有请求参数。
+
 TLS 由 feature 选：缺省 `native-tls`（系统 TLS，桌面各壳与 cli 都用这个）；`rustls`（关掉缺省时）走 ring + `webpki-roots` 内置的 Mozilla 根证书、`tls_backend_preconfigured` 交给 reqwest，不用平台证书库（`rustls-platform-verifier` 在安卓要 Java 侧组件），安卓 `apps/android/core` 直接按路径引、关缺省开 `rustls`。工作区的 `async-openai` 不带 TLS feature，直接用它的（`tools/gloss-gen`）自己开 `native-tls`。
 
 API 用量由 ChatClient 的单次发送入口计入：每次 HTTP 尝试分别累计，关思考参数与回复格式的兼容重试都按实际次数计；SDK 隐式重试关闭。CloudPredictor、CloudGlossFiller、ConnectionTest 的 `*_with_usage` 接口可指定共享统计文件，旧构造入口保持无统计行为。`api-usage.json` 只保存计数，文件锁合并跨线程／进程更新，原子写入；损坏文件保留并报告错误。缺失 usage 记未知，不估算 Token。
